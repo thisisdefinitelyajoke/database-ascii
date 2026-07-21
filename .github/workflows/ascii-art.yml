@@ -30,6 +30,7 @@ jobs:
       - name: Process catalog
         run: |
           python src/img_to_ascii.py \
+            --quiet \
             --incremental \
             --output catalog.json \
             --workers 16 \

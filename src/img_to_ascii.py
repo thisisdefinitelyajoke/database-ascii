@@ -97,7 +97,7 @@ def count_colorways(artists: list) -> int:
     )
 
 
-def process_catalog(data, use_color: bool = False, workers: int = 8, resume_file: str = None):
+def process_catalog(data, use_color: bool = False, workers: int = 8, resume_file: str = None, quiet: bool = False):
     artists = data if isinstance(data, list) else [data]
     total = count_colorways(artists)
 
@@ -110,39 +110,48 @@ def process_catalog(data, use_color: bool = False, workers: int = 8, resume_file
         with open(resume_file) as f:
             existing = json.load(f)
         existing = existing if isinstance(existing, list) else [existing]
-        print(f"Resume mode: loaded {count_colorways(existing)} existing colorways", file=sys.stderr)
+        if not quiet:
+            print(f"Resume mode: loaded {count_colorways(existing)} existing colorways", file=sys.stderr)
 
     tasks = []
     skip_count = 0
     for ai, artist in enumerate(artists):
         for si, sculpt in enumerate(artist.get("sculpts", [])):
             for ci, cw in enumerate(sculpt.get("colorways", [])):
-                # In resume mode, skip if already processed
                 if resume_mode(cw, ai, si, ci, existing):
                     skip_count += 1
                     continue
                 tasks.append((ai, si, ci, cw))
 
-    if skip_count:
+    if skip_count and not quiet:
         print(f"Skipping {skip_count} already-processed colorways", file=sys.stderr)
 
     todo = len(tasks)
     if todo == 0:
-        print("Nothing to process.", file=sys.stderr)
+        if not quiet:
+            print("Nothing to process.", file=sys.stderr)
         return artists if isinstance(data, list) else artists[0]
 
-    print(f"Processing {todo} colorways across {len(artists)} artists with {workers} workers...", file=sys.stderr)
+    if not quiet:
+        print(f"Processing {todo} colorways across {len(artists)} artists with {workers} workers...", file=sys.stderr)
 
     done = 0
+    reported_artists = set()
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(process_colorway, cw, use_color): (ai, si, ci, cw) for ai, si, ci, cw in tasks}
         for f in as_completed(futures):
             done += 1
             ai, si, ci, cw = futures[f]
             artist = artists[ai]
-            sculpt = artist["sculpts"][si]
-            name = cw.get("name", "(unnamed)")
-            print(f"[{done}/{todo}] {artist['name']} / {sculpt['name']} / {name}", file=sys.stderr)
+            artist_name = artist['name']
+            if quiet:
+                if artist_name not in reported_artists:
+                    reported_artists.add(artist_name)
+                    print(f"[{artist_name}]", file=sys.stderr)
+            else:
+                sculpt = artist["sculpts"][si]
+                name = cw.get("name", "(unnamed)")
+                print(f"[{done}/{todo}] {artist_name} / {sculpt['name']} / {name}", file=sys.stderr)
 
     return artists if isinstance(data, list) else artists[0]
 
@@ -169,6 +178,7 @@ def main():
     incremental = False
     fetch = False
     output_path = None
+    quiet = False
     positional = []
 
     argv = sys.argv[1:]
@@ -187,6 +197,8 @@ def main():
         elif a == "--output" and i + 1 < len(argv):
             i += 1
             output_path = argv[i]
+        elif a in ("--quiet", "--hide-output"):
+            quiet = True
         elif a.startswith("--"):
             print(f"Unknown option: {a}", file=sys.stderr)
             sys.exit(1)
@@ -206,12 +218,13 @@ def main():
     data = load_catalog(source)
 
     resume_file = output_path if incremental else None
-    data = process_catalog(data, use_color=use_color, workers=workers, resume_file=resume_file)
+    data = process_catalog(data, use_color=use_color, workers=workers, resume_file=resume_file, quiet=quiet)
 
     if output_path:
         with open(output_path, "w") as f:
             json.dump(data, f, indent=2)
-        print(f"Written to {output_path}", file=sys.stderr)
+        if not quiet:
+            print(f"Written to {output_path}", file=sys.stderr)
     else:
         json.dump(data, sys.stdout, indent=2)
 
