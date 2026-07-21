@@ -24,7 +24,7 @@ jobs:
 
       - name: Sync upstream catalog
         run: |
-          curl -sSL -o db/catalog.json \
+          curl -sSL -o catalog.json \
             "https://raw.githubusercontent.com/keycap-archivist/database/refs/heads/master/db/catalog.json"
 
       - name: Process catalog
@@ -32,16 +32,16 @@ jobs:
           python src/img_to_ascii.py \
             --quiet \
             --incremental \
-            --output catalog.json \
+            --ascii-dir db \
             --workers 16 \
-            db/catalog.json
+            catalog.json
 
       - name: Commit and push
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name "ascii-arter bot"
             git config user.email "bot@ascii-arter"
-            git add catalog.json db/catalog.json
+            git add catalog.json db/
             git commit -m "Update catalog with ASCII art"
             git push
           else

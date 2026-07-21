@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
@@ -97,28 +98,58 @@ def count_colorways(artists: list) -> int:
     )
 
 
-def process_catalog(data, use_color: bool = False, workers: int = 8, resume_file: str = None, quiet: bool = False):
+def sanitize_name(name: str) -> str:
+    s = name.lower().strip()
+    s = re.sub(r"[^a-z0-9_\-. ]+", "_", s)
+    s = re.sub(r"[ _]+", "_", s)
+    return s.strip("_")
+
+
+def ascii_path(dir: str, artist_name: str) -> str:
+    return os.path.join(dir, f"{sanitize_name(artist_name)}.ascii.json")
+
+
+def load_ascii_map(ascii_dir: str) -> dict:
+    combined = {}
+    if not os.path.isdir(ascii_dir):
+        return combined
+    for fn in os.listdir(ascii_dir):
+        if fn.endswith(".ascii.json"):
+            fp = os.path.join(ascii_dir, fn)
+            with open(fp) as f:
+                combined.update(json.load(f))
+    return combined
+
+
+def save_artist_ascii(ascii_dir: str, artist_name: str, data: dict):
+    os.makedirs(ascii_dir, exist_ok=True)
+    fp = ascii_path(ascii_dir, artist_name)
+    with open(fp, "w") as f:
+        json.dump(data, f, separators=(",", ":"))
+
+
+def process_catalog(data, use_color: bool = False, workers: int = 8, ascii_dir: str = None, quiet: bool = False):
     artists = data if isinstance(data, list) else [data]
     total = count_colorways(artists)
 
     if total == 0:
         return artists if isinstance(data, list) else artists[0]
 
-    # Load existing data for resume mode
-    existing = None
-    if resume_file and os.path.exists(resume_file):
-        with open(resume_file) as f:
-            existing = json.load(f)
-        existing = existing if isinstance(existing, list) else [existing]
+    ascii_map = {}
+    if ascii_dir:
+        ascii_map = load_ascii_map(ascii_dir)
         if not quiet:
-            print(f"Resume mode: loaded {count_colorways(existing)} existing colorways", file=sys.stderr)
+            print(f"Resume mode: loaded {len(ascii_map)} cached ascii_art entries", file=sys.stderr)
 
     tasks = []
     skip_count = 0
     for ai, artist in enumerate(artists):
         for si, sculpt in enumerate(artist.get("sculpts", [])):
             for ci, cw in enumerate(sculpt.get("colorways", [])):
-                if resume_mode(cw, ai, si, ci, existing):
+                cw_id = cw.get("id", "")
+                existing = ascii_map.get(cw_id) if cw_id else None
+                if existing is not None:
+                    cw["ascii_art"] = existing
                     skip_count += 1
                     continue
                 tasks.append((ai, si, ci, cw))
@@ -135,6 +166,7 @@ def process_catalog(data, use_color: bool = False, workers: int = 8, resume_file
     if not quiet:
         print(f"Processing {todo} colorways across {len(artists)} artists with {workers} workers...", file=sys.stderr)
 
+    artist_updates = {ai: {} for ai in range(len(artists))}
     done = 0
     reported_artists = set()
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -144,6 +176,9 @@ def process_catalog(data, use_color: bool = False, workers: int = 8, resume_file
             ai, si, ci, cw = futures[f]
             artist = artists[ai]
             artist_name = artist['name']
+            cw_id = cw.get("id", "")
+            if cw.get("ascii_art") is not None:
+                artist_updates[ai][cw_id] = cw["ascii_art"]
             if quiet:
                 if artist_name not in reported_artists:
                     reported_artists.add(artist_name)
@@ -153,23 +188,14 @@ def process_catalog(data, use_color: bool = False, workers: int = 8, resume_file
                 name = cw.get("name", "(unnamed)")
                 print(f"[{done}/{todo}] {artist_name} / {sculpt['name']} / {name}", file=sys.stderr)
 
+    if ascii_dir:
+        for ai, artist in enumerate(artists):
+            if artist_updates[ai]:
+                save_artist_ascii(ascii_dir, artist["name"], artist_updates[ai])
+        if not quiet:
+            print(f"Written ascii files to {ascii_dir}/", file=sys.stderr)
+
     return artists if isinstance(data, list) else artists[0]
-
-
-def resume_mode(cw: dict, ai: int, si: int, ci: int, existing: list | None) -> bool:
-    if existing is None:
-        return False
-    if ai >= len(existing):
-        return False
-    artist = existing[ai]
-    if si >= len(artist.get("sculpts", [])):
-        return False
-    sculpt = artist["sculpts"][si]
-    if ci >= len(sculpt.get("colorways", [])):
-        return False
-    existing_cw = sculpt["colorways"][ci]
-    # Only skip if ascii_art is present and not None
-    return existing_cw.get("ascii_art") is not None
 
 
 def main():
@@ -178,6 +204,7 @@ def main():
     incremental = False
     fetch = False
     output_path = None
+    ascii_dir = None
     quiet = False
     positional = []
 
@@ -197,6 +224,9 @@ def main():
         elif a == "--output" and i + 1 < len(argv):
             i += 1
             output_path = argv[i]
+        elif a == "--ascii-dir" and i + 1 < len(argv):
+            i += 1
+            ascii_dir = argv[i]
         elif a in ("--quiet", "--hide-output"):
             quiet = True
         elif a.startswith("--"):
@@ -217,12 +247,14 @@ def main():
 
     data = load_catalog(source)
 
-    resume_file = output_path if incremental else None
-    data = process_catalog(data, use_color=use_color, workers=workers, resume_file=resume_file, quiet=quiet)
+    if incremental:
+        ascii_dir = ascii_dir or "db"
+
+    data = process_catalog(data, use_color=use_color, workers=workers, ascii_dir=ascii_dir, quiet=quiet)
 
     if output_path:
         with open(output_path, "w") as f:
-            json.dump(data, f, indent=2)
+            json.dump(data, f, separators=(",", ":"))
         if not quiet:
             print(f"Written to {output_path}", file=sys.stderr)
     else:
