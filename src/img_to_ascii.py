@@ -168,6 +168,7 @@ def main():
     workers = 8
     incremental = False
     fetch = False
+    output_path = None
     positional = []
 
     argv = sys.argv[1:]
@@ -185,7 +186,7 @@ def main():
             fetch = True
         elif a == "--output" and i + 1 < len(argv):
             i += 1
-            positional.append(argv[i])
+            output_path = argv[i]
         elif a.startswith("--"):
             print(f"Unknown option: {a}", file=sys.stderr)
             sys.exit(1)
@@ -194,7 +195,6 @@ def main():
         i += 1
 
     input_path = positional[0] if len(positional) > 0 else None
-    output_path = positional[1] if len(positional) > 1 else None
 
     if fetch:
         source = UPSTREAM_URL
