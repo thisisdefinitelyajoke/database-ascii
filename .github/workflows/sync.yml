@@ -3,7 +3,7 @@ concurrency:
   group: ${{ github.ref }}
 on:
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:
@@ -17,12 +17,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
 
       - name: Install dependencies
         run: pip install -r requirements.txt
 
       - name: Process new images
-        run: python src/img_to_ascii.py --fetch --incremental --output db/catalog.json
+        run: python src/img_to_ascii.py --fetch --incremental --output db/catalog.json --color --workers 16 --quiet
 
       - name: Commit and push changes
         run: |

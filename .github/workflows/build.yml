@@ -2,30 +2,22 @@ name: Database Build
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 0 * * *' # Every everyday
-  push:
-    branches:
-      - master
 
 jobs:
   build:
     name: build
-    if: "! contains(toJSON(github.event.commits.*.message), '[skip-ci]')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.REPO_SCOPE }}
+      - uses: actions/checkout@v5
       - id: nodeversion
         run: echo "NODE=$(cat .nvmrc)" >> $GITHUB_OUTPUT
       - name: restore Cache
-        uses: actions/cache@master
+        uses: actions/cache@v4
         with:
           path: node_modules
           key: ${{ runner.os }}-${{ hashFiles('**/yarn.lock') }}
       - name: Use Node.js ${{steps.nodeversion.outputs.NODE}}
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ steps.nodeversion.outputs.NODE }}
       - name: install
