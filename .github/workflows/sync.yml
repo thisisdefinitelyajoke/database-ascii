@@ -1,0 +1,41 @@
+name: Sync & Process
+concurrency:
+  group: ${{ github.ref }}
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          lfs: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Process new images
+        run: python src/img_to_ascii.py --fetch --incremental --output db/catalog.json
+
+      - name: Commit and push changes
+        run: |
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name 'Keycap Archivist Bot'
+          git add -A
+          git diff --staged --quiet || git commit -m "sync: update catalog and ascii art"
+          git push
+
+      - name: Dispatch website-ascii build
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+        run: |
+          gh api repos/thisisdefinitelyajoke/website-ascii/dispatches \
+            --method POST \
+            --field event_type="database-update" || echo "Dispatch failed (no DISPATCH_TOKEN configured)"
