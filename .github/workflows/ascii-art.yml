@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - uses: actions/setup-python@v5
         with:
@@ -40,6 +42,7 @@ jobs:
       - name: Commit and push
         run: |
           if [ -n "$(git status --porcelain)" ]; then
+            git lfs install
             git config user.name "ascii-arter bot"
             git config user.email "bot@ascii-arter"
             git add catalog.json db/

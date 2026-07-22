@@ -10,7 +10,7 @@ import requests
 from PIL import Image
 
 ASCII_CHARS = "@%#*+=-:. "
-WIDTH = 72
+WIDTH = 48
 UPSTREAM_URL = "https://raw.githubusercontent.com/keycap-archivist/database/refs/heads/master/db/catalog.json"
 
 session = requests.Session()
@@ -44,9 +44,9 @@ def image_to_ascii(img: Image.Image, width: int = WIDTH, color: bool = False) ->
                 r, g, b = img.getpixel((x, y))[:3]
                 gray = int(0.299 * r + 0.587 * g + 0.114 * b)
                 ch = ASCII_CHARS[min(int(gray / 256 * len(ASCII_CHARS)), len(ASCII_CHARS) - 1)]
-                c = _ansi_color(r, g, b)
-                line += f"\033[38;5;{c}m{ch}"
-            lines.append(line + "\033[0m")
+                hex_color = f"#{r:02x}{g:02x}{b:02x}"
+                line += f'<span style="color:{hex_color}">{ch}</span>'
+            lines.append(line)
         return "\n".join(lines)
 
     img_gray = img.convert("L")
