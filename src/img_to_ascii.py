@@ -66,7 +66,7 @@ def image_to_ascii(img: Image.Image, width: int = WIDTH, color: bool = False) ->
     return "\n".join(lines)
 
 
-def process_colorway(cw: dict, use_color: bool = False) -> dict:
+def process_colorway(cw: dict, use_color: bool = False, quiet: bool = False) -> dict:
     img_url = cw.get("img", "")
     if not img_url:
         cw["ascii_art"] = None
@@ -75,7 +75,8 @@ def process_colorway(cw: dict, use_color: bool = False) -> dict:
         img = download_image(img_url)
         cw["ascii_art"] = image_to_ascii(img, color=use_color)
     except Exception as e:
-        print(f"  ERROR ({cw.get('name', '?')}): {e}", file=sys.stderr)
+        if not quiet:
+            print(f"  ERROR ({cw.get('name', '?')}): {e}", file=sys.stderr)
         cw["ascii_art"] = None
     return cw
 
@@ -170,7 +171,7 @@ def process_catalog(data, use_color: bool = False, workers: int = 8, ascii_dir: 
     done = 0
     reported_artists = set()
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(process_colorway, cw, use_color): (ai, si, ci, cw) for ai, si, ci, cw in tasks}
+        futures = {pool.submit(process_colorway, cw, use_color, quiet): (ai, si, ci, cw) for ai, si, ci, cw in tasks}
         for f in as_completed(futures):
             done += 1
             ai, si, ci, cw = futures[f]
@@ -257,7 +258,7 @@ def main():
             json.dump(data, f, separators=(",", ":"))
         if not quiet:
             print(f"Written to {output_path}", file=sys.stderr)
-    else:
+    elif not quiet:
         json.dump(data, sys.stdout, indent=2)
 
 
