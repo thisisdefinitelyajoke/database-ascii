@@ -125,8 +125,13 @@ def load_ascii_map(ascii_dir: str) -> dict:
 def save_artist_ascii(ascii_dir: str, artist_name: str, data: dict):
     os.makedirs(ascii_dir, exist_ok=True)
     fp = ascii_path(ascii_dir, artist_name)
+    existing = {}
+    if os.path.exists(fp):
+        with open(fp) as f:
+            existing = json.load(f)
+    existing.update(data)
     with open(fp, "w") as f:
-        json.dump(data, f, separators=(",", ":"))
+        json.dump(existing, f, separators=(",", ":"))
 
 
 def process_catalog(data, use_color: bool = False, workers: int = 8, ascii_dir: str = None, quiet: bool = False):
