@@ -5,3 +5,4 @@ SAVE_IMG/
 catalog_old.json
 dump
 key.json
+__pycache__/

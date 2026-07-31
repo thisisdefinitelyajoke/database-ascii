@@ -25,6 +25,9 @@ jobs:
       - name: Process new images
         run: python src/img_to_ascii.py --fetch --incremental --color --workers 16 --quiet
 
+      - name: Generate logo ASCII
+        run: python src/logos_to_ascii.py
+
       - name: Save upstream catalog (without ascii_art)
         run: |
           curl -sSL -o db/catalog.json \
